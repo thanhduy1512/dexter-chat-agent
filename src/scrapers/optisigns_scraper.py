@@ -250,7 +250,7 @@ class OptiSignsScraper:
             if len(page_articles) < per_page:
                 break
             
-            break
+            # break
             page += 1
                 
         print(f"\n✅ Scraping complete! Found {len(articles)} articles.")

@@ -78,35 +78,31 @@ class OptiSignsSyncJob:
         self.logger.info("🚀 Starting OptiSigns Help Center Sync Job")
         
         try:
-            # Step 1: Scrape data from OptiSigns help center
+            # Step 1: Scrape data
             self.logger.info("📡 Step 1: Scraping OptiSigns help center...")
             scraped_articles = self.scrape_articles()
             
-            # Step 2: Check existence in local /articles directory
+            # Step 2: Get local articles to compare against
             self.logger.info("📁 Step 2: Checking local articles directory...")
             local_articles = self.get_local_articles()
             
-            # Step 3: Compare and identify changes
+            # Step 3: Identify changes
             self.logger.info("🔍 Step 3: Comparing scraped vs local articles...")
             changes = self.identify_changes(scraped_articles, local_articles)
             
-            # Step 4: Check existence in OpenAI and vector store
-            self.logger.info("☁️  Step 4: Checking OpenAI and vector store...")
-            existing_files = self.check_existing_files(changes)
+            # Step 4: Process changes and sync with OpenAI
+            self.logger.info("☁️  Step 4: Processing changes and syncing with OpenAI...")
+            upload_results = self.process_and_upload_changes(changes)
             
-            # Step 5: Upload delta (new/updated articles)
-            self.logger.info("📤 Step 5: Uploading delta to OpenAI and vector store...")
-            upload_results = self.upload_delta(changes, existing_files)
-            
-            # Step 6: Log final results
-            self.logger.info("📊 Step 6: Logging final results...")
+            # Step 5: Log final results
+            self.logger.info("📊 Step 5: Logging final results...")
             self.log_final_results(upload_results, job_start)
             
             self.logger.info("✅ OptiSigns Help Center Sync Job completed successfully!")
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Job failed with error: {e}")
+            self.logger.error(f"❌ Job failed with error: {e}", exc_info=True)
             self.log_job_failure(e, job_start)
             return False
     
@@ -188,106 +184,72 @@ class OptiSignsSyncJob:
         scraped_hash = self.file_tracker.get_file_hash_from_content(scraped_data.get('content', ''))
         return scraped_hash != local_data['hash']
     
-    def check_existing_files(self, changes):
-        """Check which files already exist in OpenAI and vector store"""
-        existing_files = {
-            'openai': set(),
-            'vector_store': set()
-        }
+    def process_and_upload_changes(self, changes):
+        """Process new, updated, and unchanged articles and sync with OpenAI."""
+        results = {'uploaded': [], 'updated': [], 'skipped': [], 'deleted': [], 'failed': []}
+
+        # --- Process NEW and UPDATED articles ---
+        articles_to_sync = changes['new'] + changes['updated']
         
-        # Check OpenAI files
-        try:
-            openai_files = self.file_manager.list_all_files()
-            for file_info in openai_files:
-                filename = file_info.get('filename', '')
-                article_id = filename.replace('.txt', '')
-                existing_files['openai'].add(article_id)
-        except Exception as e:
-            self.logger.warning(f"⚠️  Could not check OpenAI files: {e}")
-        
-        # Check vector store files
-        try:
-            vector_files = self.vector_store_manager.list_all_files(self.vector_store_id)
-            for file_info in vector_files:
-                openai_file_id = file_info.get('file_id')
-                if openai_file_id:
-                    file_info = self.file_manager.get_by_id(openai_file_id)
-                    if file_info:
-                        filename = file_info.get('filename', '')
-                        article_id = filename.replace('.txt', '')
-                        existing_files['vector_store'].add(article_id)
-        except Exception as e:
-            self.logger.warning(f"⚠️  Could not check vector store files: {e}")
-        
-        self.logger.info(f"☁️  Found {len(existing_files['openai'])} files in OpenAI, {len(existing_files['vector_store'])} in vector store")
-        return existing_files
-    
-    def upload_delta(self, changes, existing_files):
-        """Upload only new and updated articles"""
-        results = {
-            'uploaded': [],
-            'skipped': [],
-            'failed': []
-        }
-        
-        # Process new articles
-        for article in changes['new']:
+        for article_data in articles_to_sync:
+            is_update = 'local_path' in article_data
+            article_id = article_data['id']
             try:
-                result = self.upload_article(article['data'], existing_files)
-                if result['success']:
-                    results['uploaded'].append(article['id'])
+                self.logger.info(f"🔄 Syncing {'updated' if is_update else 'new'} article: {article_id}")
+
+                if is_update:
+                    local_path = article_data['local_path']
+                    tracking_info = self.file_tracker.get_tracking_info(os.path.abspath(local_path))
+                    if tracking_info:
+                        if tracking_info.get('vector_store_file_id'):
+                            self.logger.info(f"🗑️  Removing old vector store file: {tracking_info.get('vector_store_file_id')}")
+                            self.vector_store_manager.remove_file(self.vector_store_id, tracking_info.get('vector_store_file_id'))
+                        if tracking_info.get('file_id'):
+                            self.logger.info(f"🗑️  Removing old OpenAI file: {tracking_info.get('file_id')}")
+                            self.file_manager.delete(tracking_info.get('file_id'))
+                
+                local_path = self.save_article_locally(article_data['data'])
+                
+                openai_file_id = self.file_manager.upload_markdown_file(local_path)
+                vector_file_id = self.vector_store_manager.add_file(self.vector_store_id, openai_file_id)
+                
+                current_hash = self.file_tracker.get_file_hash(local_path)
+                self.file_tracker.update_tracking(os.path.abspath(local_path), openai_file_id, vector_file_id, current_hash, local_path)
+                
+                if is_update:
+                    results['updated'].append(article_id)
                 else:
-                    results['failed'].append(article['id'])
+                    results['uploaded'].append(article_id)
+
             except Exception as e:
-                self.logger.error(f"❌ Failed to upload new article {article['id']}: {e}")
-                results['failed'].append(article['id'])
-        
-        # Process updated articles
-        for article in changes['updated']:
-            try:
-                result = self.upload_article(article['data'], existing_files, article['local_path'])
-                if result['success']:
-                    results['uploaded'].append(article['id'])
-                else:
-                    results['failed'].append(article['id'])
-            except Exception as e:
-                self.logger.error(f"❌ Failed to upload updated article {article['id']}: {e}")
-                results['failed'].append(article['id'])
-        
-        # Process unchanged articles
-        for article in changes['unchanged']:
-            results['skipped'].append(article['id'])
-        
-        self.logger.info(f"📤 Upload results: {len(results['uploaded'])} uploaded, {len(results['skipped'])} skipped, {len(results['failed'])} failed")
+                self.logger.error(f"❌ Failed to sync article {article_id}: {e}", exc_info=True)
+                results['failed'].append(article_id)
+
+        # --- Process UNCHANGED articles ---
+        for article_data in changes['unchanged']:
+            article_id = article_data['id']
+            local_path = article_data['local_path']
+            tracking_info = self.file_tracker.get_tracking_info(os.path.abspath(local_path))
+            
+            if tracking_info and tracking_info.get('vector_store_file_id') and \
+               self.vector_store_manager.get_file_by_id(self.vector_store_id, tracking_info.get('vector_store_file_id')):
+                
+                self.logger.info(f"✅ Article {article_id} is unchanged and verified. Skipping.")
+                results['skipped'].append(article_id)
+            else:
+                self.logger.warning(f"⚠️  Article {article_id} was unchanged locally, but missing remotely. Re-uploading.")
+                try:
+                    openai_file_id = self.file_manager.upload_markdown_file(local_path)
+                    vector_file_id = self.vector_store_manager.add_file(self.vector_store_id, openai_file_id)
+                    current_hash = self.file_tracker.get_file_hash(local_path)
+                    self.file_tracker.update_tracking(os.path.abspath(local_path), openai_file_id, vector_file_id, current_hash, local_path)
+                    results['uploaded'].append(article_id)
+                except Exception as e:
+                    self.logger.error(f"❌ Failed to re-upload missing article {article_id}: {e}", exc_info=True)
+                    results['failed'].append(article_id)
+
+        self.logger.info(f"📊 Sync results: {len(results['uploaded'])} uploaded, {len(results['updated'])} updated, {len(results['skipped'])} skipped, {len(results['failed'])} failed")
         return results
-    
-    def upload_article(self, article_data, existing_files, local_path=None):
-        """Upload a single article to OpenAI and vector store"""
-        article_id = article_data['id']
-        
-        # Check if already exists
-        if article_id in existing_files['vector_store']:
-            return {'success': True, 'action': 'skipped', 'reason': 'already_exists'}
-        
-        # Save article to local directory if needed
-        if not local_path:
-            local_path = self.save_article_locally(article_data)
-        
-        # Upload to OpenAI
-        try:
-            openai_file_id = self.file_manager.upload_markdown_file(local_path)
-            
-            # Add to vector store
-            vector_file_id = self.vector_store_manager.add_file(self.vector_store_id, openai_file_id)
-            
-            # Update tracking
-            self.file_tracker.update_tracking(local_path, openai_file_id, vector_file_id)
-            
-            return {'success': True, 'action': 'uploaded', 'openai_file_id': openai_file_id, 'vector_file_id': vector_file_id}
-            
-        except Exception as e:
-            self.logger.error(f"❌ Failed to upload article {article_id}: {e}")
-            return {'success': False, 'error': str(e)}
     
     def save_article_locally(self, article_data):
         """Save article to local directory"""
@@ -311,10 +273,13 @@ class OptiSignsSyncJob:
             'log_file': self.log_file,
             'results': {
                 'uploaded': len(upload_results['uploaded']),
+                'updated': len(upload_results['updated']),
                 'skipped': len(upload_results['skipped']),
+                'deleted': len(upload_results['deleted']),
                 'failed': len(upload_results['failed'])
             },
             'uploaded_articles': upload_results['uploaded'],
+            'updated_articles': upload_results['updated'],
             'failed_articles': upload_results['failed']
         }
         
@@ -325,7 +290,9 @@ class OptiSignsSyncJob:
         self.logger.info("📊 Job Summary:")
         self.logger.info(f"   ⏱️  Duration: {duration.total_seconds():.2f} seconds")
         self.logger.info(f"   📤 Uploaded: {summary['results']['uploaded']}")
+        self.logger.info(f"   🔄 Updated: {summary['results']['updated']}")
         self.logger.info(f"   ✅ Skipped: {summary['results']['skipped']}")
+        self.logger.info(f"   🗑️  Deleted: {summary['results']['deleted']}")
         self.logger.info(f"   ❌ Failed: {summary['results']['failed']}")
         self.logger.info(f"   📄 Log file: {self.log_file}")
         
