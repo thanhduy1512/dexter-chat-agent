@@ -11,11 +11,15 @@ import os
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 import html2text
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class OptiSignsScraper:
     def __init__(self):
-        self.base_url = "https://support.optisigns.com/api/v2/help_center/en-us/articles"
-        self.output_dir = "articles"
+        self.base_url = os.getenv('OPTISIGNS_API_BASE_URL', '')
+        self.output_dir = os.getenv('OUTPUT_DIRECTORY', 'articles')
         self.h2t = html2text.HTML2Text()
         self.setup_html2text()
         
@@ -31,8 +35,11 @@ class OptiSignsScraper:
         self.h2t.inline_links = True
         self.h2t.protect_links = True
         
-    def fetch_articles(self, page=1, per_page=30):
+    def fetch_articles(self, page=1, per_page=None):
         """Fetch articles from the OptiSigns API"""
+        if per_page is None:
+            per_page = int(os.getenv('ARTICLES_PER_PAGE', 30))
+            
         url = f"{self.base_url}?page={page}&per_page={per_page}"
         
         try:
@@ -145,7 +152,7 @@ class OptiSignsScraper:
         self.create_output_directory()
         
         # Calculate pages needed
-        per_page = 30
+        per_page = int(os.getenv('ARTICLES_PER_PAGE', 30))
         pages_needed = (count + per_page - 1) // per_page
         
         total_saved = 0
