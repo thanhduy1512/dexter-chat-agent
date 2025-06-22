@@ -1,10 +1,10 @@
-# OptiSigns Help Center Sync Job
+# Help Center Sync Job
 
-A comprehensive job system that scrapes OptiSigns help center articles, detects changes, and syncs them to OpenAI vector stores with intelligent delta detection.
+A comprehensive job system that scrapes help center articles, detects changes, and syncs them to OpenAI vector stores with intelligent delta detection.
 
 ## 🚀 Features
 
-- **Smart Scraping**: Scrapes all articles from OptiSigns help center
+- **Smart Scraping**: Scrapes all articles from help center
 - **Delta Detection**: Only uploads new or updated articles using content hashing
 - **OpenAI Integration**: Uploads articles to OpenAI files and vector stores
 - **Comprehensive Logging**: Detailed job logs with summaries and history
@@ -20,7 +20,7 @@ dexter-chat-agent/
 ├── src/                             # Source code modules
 │   ├── scrapers/                    # Scraping functionality
 │   │   ├── __init__.py
-│   │   └── optisigns_scraper.py     # OptiSigns help center scraper
+│   │   └── optisigns_scraper.py     # help center scraper
 │   ├── openai/                      # OpenAI integration
 │   │   ├── __init__.py
 │   │   ├── file_manager.py          # OpenAI file operations
@@ -41,17 +41,20 @@ dexter-chat-agent/
 ## 🛠️ Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone <repository-url>
    cd dexter-chat-agent
    ```
 
 2. **Install dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. **Set up environment variables**
+
    ```bash
    cp env.example .env
    # Edit .env with your configuration
@@ -67,7 +70,7 @@ OPENAI_API_KEY=your_openai_api_key
 OPENAI_API_BASE_URL=https://api.openai.com/v1
 VECTOR_STORE_ID=your_vector_store_id
 
-# OptiSigns Configuration
+# Configuration
 OPTISIGNS_API_BASE_URL=https://support.optisigns.com/api/v2/help_center/en-us/articles
 ARTICLES_PER_PAGE=30
 
@@ -86,7 +89,8 @@ python main.py
 ```
 
 **Job Flow:**
-1. **Scrape** data from OptiSigns help center
+
+1. **Scrape** data from help center
 2. **Check** existence in local `/articles` directory
 3. **Compare** content (hash, last-modified)
 4. **Check** existence in OpenAI files and vector store
@@ -102,6 +106,7 @@ python test_main_job.py
 ```
 
 This will verify:
+
 - All modules can be imported
 - Environment variables are set correctly
 - Main job can be initialized
@@ -123,15 +128,16 @@ ls -la logs/
 The job provides comprehensive logging and reporting:
 
 ### Console Output
+
 ```
-🚀 Starting OptiSigns Help Center Sync Job
-📡 Step 1: Scraping OptiSigns help center...
+🚀 Starting Help Center Sync Job
+📡 Step 1: Scraping help center...
 📁 Step 2: Checking local articles directory...
 🔍 Step 3: Comparing scraped vs local articles...
 ☁️  Step 4: Checking OpenAI and vector store...
 📤 Step 5: Uploading delta to OpenAI and vector store...
 📊 Step 6: Logging final results...
-✅ OptiSigns Help Center Sync Job completed successfully!
+✅ Help Center Sync Job completed successfully!
 
 📊 Job Summary:
    ⏱️  Duration: 45.23 seconds
@@ -142,6 +148,7 @@ The job provides comprehensive logging and reporting:
 ```
 
 ### Job Summary JSON
+
 ```json
 {
   "job_start": "2024-12-22T14:30:22.123456",
@@ -209,7 +216,7 @@ The job creates detailed logs in the `logs/` directory:
 3. **API Errors**
    - Verify OpenAI API key and base URL
    - Check vector store ID exists
-   - Ensure OptiSigns API is accessible
+   - Ensure API is accessible
 
 ### Debug Mode
 
@@ -237,4 +244,4 @@ The job is optimized for efficiency:
 
 ## 📄 License
 
-[Add your license information here] 
+[Add your license information here]
