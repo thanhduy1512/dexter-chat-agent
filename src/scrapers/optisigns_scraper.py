@@ -18,8 +18,14 @@ load_dotenv()
 
 class OptiSignsScraper:
     def __init__(self):
-        self.base_url = os.getenv('OPTISIGNS_API_BASE_URL', '')
-        self.output_dir = os.getenv('OUTPUT_DIRECTORY', 'articles')
+        self.base_url = os.getenv('OPTISIGNS_API_BASE_URL')
+        if not self.base_url:
+            raise ValueError("OPTISIGNS_API_BASE_URL not found in environment variables")
+            
+        self.output_dir = os.getenv('OUTPUT_DIRECTORY')
+        if not self.output_dir:
+            raise ValueError("OUTPUT_DIRECTORY not found in environment variables")
+            
         self.h2t = html2text.HTML2Text()
         self.setup_html2text()
         
@@ -38,7 +44,9 @@ class OptiSignsScraper:
     def fetch_articles(self, page=1, per_page=None):
         """Fetch articles from the OptiSigns API"""
         if per_page is None:
-            per_page = int(os.getenv('ARTICLES_PER_PAGE', 30))
+            per_page = int(os.getenv('ARTICLES_PER_PAGE'))
+            if not per_page:
+                raise ValueError("ARTICLES_PER_PAGE not found in environment variables")
             
         url = f"{self.base_url}?page={page}&per_page={per_page}"
         
@@ -152,7 +160,9 @@ class OptiSignsScraper:
         self.create_output_directory()
         
         # Calculate pages needed
-        per_page = int(os.getenv('ARTICLES_PER_PAGE', 30))
+        per_page = int(os.getenv('ARTICLES_PER_PAGE'))
+        if not per_page:
+            raise ValueError("ARTICLES_PER_PAGE not found in environment variables")
         pages_needed = (count + per_page - 1) // per_page
         
         total_saved = 0
@@ -182,4 +192,66 @@ class OptiSignsScraper:
                 break
                 
         print(f"\n✅ Scraping complete! Saved {total_saved} articles to '{self.output_dir}/' directory.")
-        return total_saved 
+        return total_saved
+    
+    def scrape_all_articles(self):
+        """Scrape all articles and return as dictionary with content"""
+        print("Starting to scrape all articles from OptiSigns Help Center...")
+        
+        articles = {}
+        page = 1
+        per_page = int(os.getenv('ARTICLES_PER_PAGE', '30'))
+        
+        while True:
+            print(f"Fetching page {page}...")
+            
+            # Fetch articles for this page
+            data = self.fetch_articles(page=page, per_page=per_page)
+            
+            if not data or 'articles' not in data or not data['articles']:
+                print(f"No more articles found on page {page}")
+                break
+                
+            page_articles = data['articles']
+            
+            # Process articles
+            for article in page_articles:
+                article_id = str(article['id'])
+                
+                # Convert HTML body to markdown
+                markdown_content = self.html_to_markdown(article['body'])
+                
+                # Create the full markdown document
+                full_markdown = f"""# {article['title']}
+
+**Article ID:** {article_id}  
+**Original URL:** {article['html_url']}  
+**Created:** {article['created_at']}  
+**Updated:** {article['updated_at']}
+
+---
+
+{markdown_content}
+
+---
+*Scraped from OptiSigns Help Center*
+"""
+                
+                articles[article_id] = {
+                    'id': article_id,
+                    'title': article['title'],
+                    'url': article['html_url'],
+                    'created_at': article['created_at'],
+                    'updated_at': article['updated_at'],
+                    'content': full_markdown
+                }
+            
+            # Check if we've reached the end
+            if len(page_articles) < per_page:
+                break
+            
+            break
+            page += 1
+                
+        print(f"\n✅ Scraping complete! Found {len(articles)} articles.")
+        return articles 

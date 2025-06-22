@@ -1,0 +1,13 @@
+{
+  "job_start": "2025-06-22T16:09:38.486705",
+  "job_end": "2025-06-22T16:09:39.942706",
+  "duration_seconds": 1.456001,
+  "log_file": "logs/sync_job_20250622_160938.log",
+  "results": {
+    "uploaded": 0,
+    "skipped": 30,
+    "failed": 0
+  },
+  "uploaded_articles": [],
+  "failed_articles": []
+}
