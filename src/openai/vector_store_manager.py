@@ -43,14 +43,28 @@ class VectorStoreManager:
             return None
     
     def list_all_files(self, vector_store_id):
-        """List all files in a vector store"""
+        """List all files in a vector store with pagination support"""
         url = f"{self.base_url}/vector_stores/{vector_store_id}/files"
+        all_files = []
         
         try:
-            response = requests.get(url, headers=self.headers)
-            if response.status_code == 200:
-                return response.json().get('data', [])
-            return []
+            params = {}
+            while True:
+                response = requests.get(url, headers=self.headers, params=params)
+                if response.status_code != 200:
+                    break
+                    
+                data = response.json()
+                files = data.get('data', [])
+                all_files.extend(files)
+                
+                # Check for next page - use the last object ID as 'after' parameter
+                if data.get('has_more') and files:
+                    params['after'] = files[-1]['id']
+                else:
+                    break
+                    
+            return all_files
         except requests.RequestException:
             return []
     
@@ -112,4 +126,63 @@ class VectorStoreManager:
             else:
                 failed_count += 1
         
-        return failed_count == 0 
+        return failed_count == 0
+    
+    def create_file_index(self, vector_store_id):
+        """Create a fast lookup index of all files in the vector store"""
+        print("🔍 Creating file index for fast lookups...")
+        
+        files = self.list_all_files(vector_store_id)
+        file_index = {}
+        
+        # Create lookup by filename
+        for file in files:
+            openai_file_id = file.get('file_id')
+            if openai_file_id:
+                # Get file info once and cache it
+                from src.openai.file_manager import OpenAIFileManager
+                file_manager = OpenAIFileManager()
+                file_info = file_manager.get_by_id(openai_file_id)
+                
+                if file_info:
+                    filename = file_info.get('filename', '')
+                    file_index[filename] = {
+                        'vector_store_file_id': file.get('id'),
+                        'openai_file_id': openai_file_id,
+                        'file_info': file_info
+                    }
+                    print(f"📝 Indexed: {filename} -> {file.get('id')}")
+        
+        print(f"✅ File index created with {len(file_index)} files")
+        print(f"🔍 Index keys: {list(file_index.keys())[:5]}...")  # Show first 5 keys
+        return file_index
+    
+    def check_file_exists_fast(self, vector_store_id, filename, file_index=None):
+        """Fast file existence check using pre-built index"""
+        if file_index is None:
+            file_index = self.create_file_index(vector_store_id)
+        
+        txt_filename = filename.replace('.md', '.txt')
+        print(f"🔍 Looking for: {txt_filename} in index with {len(file_index)} files")
+        print(f"🔍 Available keys: {list(file_index.keys())[:5]}...")  # Show first 5 available keys
+        
+        exists = txt_filename in file_index
+        print(f"🔍 Found: {exists}")
+        return exists, file_index.get(txt_filename, {})
+    
+    def replace_file(self, vector_store_id, old_file_id, new_openai_file_id):
+        """Replace an existing file in the vector store with a new one"""
+        try:
+            # Remove the old file from vector store
+            if old_file_id:
+                self.remove_file(vector_store_id, old_file_id)
+                print(f"🗑️ Removed old file {old_file_id} from vector store")
+            
+            # Add the new file to vector store
+            new_vector_store_file_id = self.add_file(vector_store_id, new_openai_file_id)
+            print(f"✅ Added new file {new_openai_file_id} to vector store")
+            
+            return new_vector_store_file_id
+        except Exception as e:
+            print(f"❌ Error replacing file: {e}")
+            return None 

@@ -1,0 +1,10 @@
+{
+  "job_start": "2025-06-22T20:21:07.750049",
+  "job_end": "2025-06-22T20:23:21.240177",
+  "duration_seconds": 133.49,
+  "results": {
+    "uploaded": 393,
+    "skipped": 0,
+    "failed": 0
+  }
+}

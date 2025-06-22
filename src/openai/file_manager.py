@@ -80,4 +80,21 @@ class OpenAIFileManager:
             response.raise_for_status()
             return True
         except requests.RequestException:
-            return False 
+            return False
+    
+    def replace_file(self, old_file_id, new_file_path, purpose="assistants"):
+        """Replace an existing file with a new one"""
+        try:
+            # Delete the old file
+            if old_file_id:
+                self.delete(old_file_id)
+                print(f"🗑️ Deleted old OpenAI file {old_file_id}")
+            
+            # Upload the new file
+            new_file_id = self.upload_file(new_file_path, purpose)
+            print(f"✅ Uploaded new file {new_file_id}")
+            
+            return new_file_id
+        except Exception as e:
+            print(f"❌ Error replacing file: {e}")
+            return None 
