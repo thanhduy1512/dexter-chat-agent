@@ -23,5 +23,5 @@ RUN mkdir -p articles logs
 # Set environment variables
 ENV PYTHONPATH=/app
 
-# Run the sync job
+# Run the sync job once and exit
 CMD ["python", "main.py"] 

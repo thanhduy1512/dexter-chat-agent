@@ -86,6 +86,7 @@ class OptiSignsSyncJob:
             # Step 4: Process articles in parallel
             logging.info(f"⚡ Step 4: Processing articles with {self.max_workers} parallel workers...")
             uploaded_count = 0
+            updated_count = 0
             skipped_count = 0
             failed_count = 0
             
@@ -109,6 +110,8 @@ class OptiSignsSyncJob:
                         result = future.result()
                         if result == 'uploaded':
                             uploaded_count += 1
+                        elif result == 'updated':
+                            updated_count += 1
                         elif result == 'skipped':
                             skipped_count += 1
                         else:
@@ -125,6 +128,7 @@ class OptiSignsSyncJob:
                 'duration_seconds': round(duration, 2),
                 'results': {
                     'uploaded': uploaded_count,
+                    'updated': updated_count,
                     'skipped': skipped_count,
                     'failed': failed_count,
                     'missing_local': missing_local_count
@@ -134,7 +138,7 @@ class OptiSignsSyncJob:
             self.job_logger.save_job_summary(summary)
             
             logging.info("✅ Help Center Sync Job completed successfully!")
-            logging.info(f"📊 Results: {uploaded_count} uploaded, {skipped_count} skipped, {failed_count} failed, {missing_local_count} missing locally")
+            logging.info(f"📊 Results: {uploaded_count} uploaded, {updated_count} updated, {skipped_count} skipped, {failed_count} failed, {missing_local_count} missing locally")
             logging.info(f"⏱️ Duration: {duration:.2f} seconds")
             logging.info(f"🚀 Parallel processing with {self.max_workers} workers")
             
@@ -178,7 +182,7 @@ class OptiSignsSyncJob:
 
         # 3. Changed file (hash mismatch)
         try:
-            logging.info(f"🔄 Article {article_id} changed, updating...")
+            logging.info(f"🔄 Updating article {article_id} (content changed)...")
             # Upload new file to OpenAI
             new_openai_file_id = self.file_manager.upload_markdown_file(local_file_path)
             # Remove old from vector store (if present)
@@ -193,7 +197,7 @@ class OptiSignsSyncJob:
                     file_key, new_openai_file_id, new_vector_store_file_id, current_hash, local_file_path
                 )
             logging.info(f"✅ Article {article_id} updated in OpenAI and vector store")
-            return 'uploaded'
+            return 'updated'
         except Exception as e:
             logging.error(f"❌ Failed to update article {article_id}: {e}")
             return 'failed'
