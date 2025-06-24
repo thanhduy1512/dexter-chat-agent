@@ -58,6 +58,21 @@ class OptiSignsSyncJob:
             articles = self.scraper.scrape_all_articles()
             logging.info(f"✅ Scraped {len(articles)} articles from API")
             
+            # Step 1.5: Download articles to disk
+            logging.info(" Step 1.5: Downloading articles to disk...")
+            self.scraper.create_output_directory()
+            downloaded_count = 0
+            for article_id, article in articles.items():
+                filename = f"{article_id}.md"
+                filepath = os.path.join(self.scraper.output_dir, filename)
+                try:
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(article['content'])
+                    downloaded_count += 1
+                except Exception as e:
+                    logging.error(f"❌ Failed to save article {article_id}: {e}")
+            logging.info(f"✅ Downloaded {downloaded_count} articles to disk")
+            
             # Step 2: Filter to only articles that exist locally
             logging.info("🔍 Step 2: Filtering to locally existing files...")
             local_articles = {}
