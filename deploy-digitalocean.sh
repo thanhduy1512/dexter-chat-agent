@@ -40,7 +40,7 @@ docker run --rm \
     -v "$(pwd)/logs:/app/logs" \
     -v "$(pwd)/articles:/app/articles" \
     -v "$(pwd)/upload_tracking.json:/app/upload_tracking.json" \
-    help-center-sync:latest
+    help-center-sync:latest python main.py
 EOF
 
 chmod +x run-sync.sh
