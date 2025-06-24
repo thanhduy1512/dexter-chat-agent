@@ -29,6 +29,9 @@ HTML_TEMPLATE = """
         body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
         .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .header { background: #2c3e50; color: white; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .header h1 { margin: 0 0 10px 0; }
+        .header p { margin: 0; }
+        .current-time { background: #34495e; color: #ecf0f1; padding: 8px 15px; border-radius: 3px; font-family: monospace; font-size: 14px; margin-top: 10px; }
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .stat-card { background: #ecf0f1; padding: 15px; border-radius: 5px; text-align: center; }
         .stat-number { font-size: 2em; font-weight: bold; color: #2c3e50; }
@@ -45,6 +48,12 @@ HTML_TEMPLATE = """
         .info { color: #3498db; }
     </style>
     <script>
+        function updateCurrentTime() {
+            const now = new Date();
+            const utcTime = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+            document.getElementById('current-time').textContent = '🕐 Current UTC Time: ' + utcTime;
+        }
+        
         function refreshLogs() {
             fetch('/api/logs')
                 .then(response => response.json())
@@ -59,12 +68,15 @@ HTML_TEMPLATE = """
             const checkbox = document.getElementById('auto-refresh');
             if (checkbox.checked) {
                 setInterval(refreshLogs, 10000); // Refresh every 10 seconds
+                setInterval(updateCurrentTime, 1000); // Update time every second
             }
         }
         
         // Initial load
         document.addEventListener('DOMContentLoaded', function() {
+            updateCurrentTime();
             refreshLogs();
+            setInterval(updateCurrentTime, 1000); // Update time every second
         });
     </script>
 </head>
@@ -73,6 +85,7 @@ HTML_TEMPLATE = """
         <div class="header">
             <h1>🚀 Help Center Sync Job - Logs</h1>
             <p>Real-time monitoring of article sync process</p>
+            <div id="current-time" class="current-time">🕐 Current UTC Time: Loading...</div>
         </div>
         
         <button class="refresh-btn" onclick="refreshLogs()">🔄 Refresh Logs</button>
@@ -133,7 +146,8 @@ def extract_stats(log_content):
         'skipped': 0,
         'failed': 0,
         'total_articles': 0,
-        'last_run': 'Never'
+        'last_run': 'Never',
+        'duration': '0s'
     }
     
     # Extract numbers from log
@@ -157,10 +171,28 @@ def extract_stats(log_content):
     if total_match:
         stats['total_articles'] = int(total_match.group(1))
     
-    # Get last run time
-    time_match = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', log_content)
-    if time_match:
-        stats['last_run'] = time_match.group(1)
+    # Get last run time (look for the most recent timestamp)
+    time_matches = re.findall(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', log_content)
+    if time_matches:
+        # Get the last (most recent) timestamp
+        last_time = time_matches[-1]
+        try:
+            # Parse the time and format it as UTC
+            dt = datetime.strptime(last_time, '%Y-%m-%d %H:%M:%S')
+            stats['last_run'] = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        except:
+            stats['last_run'] = last_time
+    
+    # Extract duration
+    duration_match = re.search(r'Duration: ([\d.]+) seconds', log_content)
+    if duration_match:
+        duration_sec = float(duration_match.group(1))
+        if duration_sec < 60:
+            stats['duration'] = f"{duration_sec:.1f}s"
+        else:
+            minutes = int(duration_sec // 60)
+            seconds = duration_sec % 60
+            stats['duration'] = f"{minutes}m {seconds:.1f}s"
     
     return stats
 
@@ -190,7 +222,11 @@ def generate_stats_html(stats):
         </div>
         <div class="stat-card">
             <div class="stat-number">{stats['last_run']}</div>
-            <div class="stat-label">Last Run</div>
+            <div class="stat-label">Last Run (UTC)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{stats['duration']}</div>
+            <div class="stat-label">Duration</div>
         </div>
     </div>
     """
