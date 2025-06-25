@@ -51,3 +51,53 @@ python test_main_job.py
 ![Successful Test Screenshot](assets/youtube_test.jp2)
 
 The assistant correctly answered: "How do I add a YouTube video?" with detailed instructions.
+
+## Deploying to a DigitalOcean Droplet (Short Guide)
+
+1. **Upload or git clone your project to the droplet**
+2. **Build the Docker image:**
+
+   ```bash
+   docker build -t help-center-sync:latest .
+   ```
+
+3. **Create deployment directory and copy files:**
+
+   ```bash
+   mkdir -p /opt/help-center-sync
+   cp -r * /opt/help-center-sync/
+   cd /opt/help-center-sync
+   ```
+
+4. **Set up your `.env` file** (see `env.example` for required variables)
+5. **Create the run script:**
+
+   ```bash
+   cat > run-sync.sh << 'EOF'
+   #!/bin/bash
+   cd /opt/help-center-sync
+   docker run --rm \
+       --env-file .env \
+       -v "$(pwd)/logs:/app/logs" \
+       -v "$(pwd)/articles:/app/articles" \
+       -v "$(pwd)/upload_tracking.json:/app/upload_tracking.json" \
+       help-center-sync:latest python main.py
+   EOF
+   chmod +x run-sync.sh
+   ```
+
+6. **(Optional) Set up the log viewer:**
+   - Copy `log_viewer.py` to `/opt/help-center-sync/`
+   - Install Flask: `apt install python3-flask -y`
+   - Run: `python3 log_viewer.py` or set up as a service
+7. **Set up a cron job (example: run daily at 9 PM UTC):**
+
+   ```bash
+   crontab -e
+   # Add this line:
+   0 21 * * * /opt/help-center-sync/run-sync.sh >> /opt/help-center-sync/logs/cron.log 2>&1
+   ```
+
+**That's it!**
+
+_This does not affect the local/Docker usage instructions above._
